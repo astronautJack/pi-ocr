@@ -129,11 +129,17 @@ async function convertPdfPage(pdfPath: string, pageIndex: number, outPath: strin
 
 async function callOllama(
   host: string, imagePath: string, signal: AbortSignal | undefined, model: string,
+  numCtx?: number,
 ): Promise<string> {
   const imageBase64 = readFileSync(imagePath).toString("base64");
   const prompt = buildPrompt("auto");
 
-  const body = JSON.stringify({ model, prompt, images: [imageBase64], stream: false });
+  // Only set options.num_ctx when explicitly configured; otherwise let Ollama use its default.
+  const options = numCtx ? { num_ctx: numCtx } : undefined;
+  const body = JSON.stringify({
+    model, prompt, images: [imageBase64], stream: false,
+    ...(options ? { options } : {}),
+  });
 
   const response = await fetch(`${host}/api/generate`, {
     method: "POST",
@@ -157,6 +163,7 @@ async function callOllama(
 export async function ollamaOcr(
   filePath: string, ollamaHost: string, model: string,
   signal: AbortSignal | undefined, onProgress: OcrProgressCallback,
+  numCtx?: number,
 ): Promise<OcrResult> {
   let resultText = "";
   let tmpDir: string | null = null;
@@ -187,7 +194,7 @@ export async function ollamaOcr(
         }
 
         onProgress(`🔍 OCR page ${i + 1}/${pageCount}…`);
-        const pageText = await callOllama(ollamaHost, pageOut, signal, model);
+        const pageText = await callOllama(ollamaHost, pageOut, signal, model, numCtx);
         if (!pageText.trim()) {
           pageResults.push(`## Page ${i + 1}\n\n> ⚠️ OCR returned empty result for this page.`);
         } else {
@@ -196,10 +203,10 @@ export async function ollamaOcr(
       }
       resultText = pageResults.join("\n\n");
     } else {
-      resultText = await callOllama(ollamaHost, filePath, signal, model);
+      resultText = await callOllama(ollamaHost, filePath, signal, model, numCtx);
     }
 
-    return { text: resultText, details: { backend: "ollama", model } };
+    return { text: resultText, details: { backend: "ollama", model, ...(numCtx ? { numCtx } : {}) } };
   } finally {
     if (tmpDir) cleanupDir(tmpDir);
   }

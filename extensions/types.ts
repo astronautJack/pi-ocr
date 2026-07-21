@@ -17,6 +17,8 @@ export interface OcrConfig {
   mineruSplitPdf: boolean;
   /** MinerU Pro: API token for precision API */
   mineruToken?: string;
+  /** Ollama: context window size sent via options.num_ctx. When undefined, Ollama's default is used. */
+  numCtx?: number;
 }
 
 export interface OcrResult {
