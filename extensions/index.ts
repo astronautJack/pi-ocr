@@ -111,6 +111,10 @@ function saveOcrConfig(updates: Partial<OcrConfig>) {
 
 function getConfig(): OcrConfig {
 	const s = loadOcrConfig();
+	const envNumCtx = process.env.OCR_NUM_CTX ? Number(process.env.OCR_NUM_CTX) : undefined;
+	const numCtx = envNumCtx && !isNaN(envNumCtx)
+		? envNumCtx
+		: typeof s.numCtx === "number" ? s.numCtx : undefined;
 	return {
 		backend: (BACKENDS.includes(s.backend as Backend)
 			? s.backend
@@ -120,6 +124,7 @@ function getConfig(): OcrConfig {
 		model: process.env.OCR_MODEL || s.model || "glm-ocr",
 		mineruSplitPdf: s.mineruSplitPdf !== false,
 		mineruToken: s.mineruToken,
+		numCtx,
 	};
 }
 
@@ -200,6 +205,7 @@ const ocrTool = defineTool({
 						resolvedModel,
 						signal,
 						onProgress,
+						config.numCtx,
 					);
 					break;
 				case "mineru": {
@@ -427,6 +433,27 @@ export default function ocrExtension(pi: ExtensionAPI) {
 							settingsListRef?.updateValue("model", selected);
 						}
 						done(selected);
+					});
+				},
+			},
+			{
+				id: "numCtx",
+				label: "Ollama num_ctx",
+				description:
+					"Context window size for OCR (only applies to Ollama backend)",
+				currentValue: config.numCtx ? String(config.numCtx) : "default",
+				submenu: (_currentValue, done) => {
+					return createNumCtxInput(config.numCtx, ctx, (value) => {
+						if (value !== undefined) {
+							saveOcrConfig({ numCtx: value });
+							if (value) process.env.OCR_NUM_CTX = String(value);
+							else delete process.env.OCR_NUM_CTX;
+							settingsListRef?.updateValue(
+								"numCtx",
+								value ? String(value) : "default",
+							);
+						}
+						done(value !== undefined ? String(value) : undefined);
 					});
 				},
 			},
@@ -797,6 +824,65 @@ export default function ocrExtension(pi: ExtensionAPI) {
 				if (matchesKey(data, Key.enter)) {
 					const value = input.getValue().trim();
 					onDone(value || undefined);
+					return;
+				}
+				input.handleInput(data);
+			},
+		};
+	}
+
+	function createNumCtxInput(
+		currentNumCtx: number | undefined,
+		ctx: ExtensionContext,
+		onDone: (value: number | undefined) => void,
+	) {
+		const theme = ctx.ui.theme;
+		const input = new Input();
+		if (currentNumCtx) input.setValue(String(currentNumCtx));
+
+		return {
+			render(width: number) {
+				const lines: string[] = [];
+				const add = (s: string) => lines.push(s);
+				add(theme.fg("accent", "─".repeat(width)));
+				add("");
+				add(
+					theme.fg(
+						"text",
+						" Ollama num_ctx — context window size for OCR requests",
+					),
+				);
+				add("");
+				add(theme.fg("muted", ` Current: ${currentNumCtx ?? "default (Ollama decides)"}`));
+				add("");
+				add(theme.fg("text", " New value (blank = use Ollama default):"));
+				add("");
+				for (const line of input.render(width - 4)) {
+					add(`  ${line}`);
+				}
+				add("");
+				add(theme.fg("dim", " Enter to confirm · Esc to cancel"));
+				add(theme.fg("accent", "─".repeat(width)));
+				return lines;
+			},
+			invalidate() {},
+			handleInput(data: string) {
+				if (matchesKey(data, Key.escape)) {
+					onDone(undefined);
+					return;
+				}
+				if (matchesKey(data, Key.enter)) {
+					const raw = input.getValue().trim();
+					if (!raw) {
+						onDone(undefined); // blank = keep default (unset)
+						return;
+					}
+					const n = Number(raw);
+					if (isNaN(n) || n <= 0 || !Number.isFinite(n)) {
+						ctx.ui.notify("num_ctx must be a positive integer", "warning");
+						return;
+					}
+					onDone(Math.floor(n));
 					return;
 				}
 				input.handleInput(data);

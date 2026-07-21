@@ -70,6 +70,25 @@ ollama pull glm-ocr
 sudo apt install poppler-utils
 ```
 
+### Context window (`num_ctx`)
+
+By default, Ollama uses its model's default context size. For dense pages or
+multi-page PDFs, increase it via the `/ocr` **Ollama num_ctx** setting, or in
+`~/.pi/agent/settings.json`:
+
+```json
+{
+  "piOcr": {
+    "backend": "ollama",
+    "model": "glm-ocr",
+    "numCtx": 50000
+  }
+}
+```
+
+An `OCR_NUM_CTX` environment variable overrides both. Leave unset to use
+Ollama's default.
+
 ---
 
 ## Tesseract
@@ -107,6 +126,7 @@ Open with `/ocr` (no args).
 | MinerU: Split PDF >20 pages | Auto-split large PDFs into free-tier chunks |
 | MinerU Pro Token | API token from mineru.net/apiManage |
 | Ollama Model | Vision model (glm-ocr, minicpm-v, etc.) |
+| Ollama num_ctx | Context window size for OCR requests (blank = Ollama default) |
 | Clear OCR temp files | Remove cached OCR output from /tmp |
 
 ---
